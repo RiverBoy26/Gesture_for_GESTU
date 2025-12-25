@@ -14,7 +14,7 @@ from collections import deque
 # НАСТРОЙКИ / КОНСТАНТЫ
 # =========================
 
-MODEL_PATH = Path("hand_landmarker.task")  # положи рядом со скриптом
+MODEL_PATH = Path("./hand_landmarker.task")  # положи рядом со скриптом
 
 d_traj = deque(maxlen=120)
 yo_traj = deque(maxlen=120)
@@ -817,6 +817,64 @@ def is_letter_Z(z_traj, min_points=30):
     return True
 
 # =========================
+# ЦИФРЫ 1..5 (СТАТИЧЕСКИЕ)
+# =========================
+def get_fingers_state(xyz):
+    """
+    Возвращает список из 5 флагов:
+    [thumb, index, middle, ring, pinky], где True = палец поднят/выпрямлен.
+    Работает без handedness (лев./прав. рука) — по углам.
+    """
+
+    # Большой палец:
+    #  - по углам прямой
+    #  - и действительно "наружу" (не прижат к ладони/кулаку)
+    thumb_ext = finger_extended(xyz, 1, 2, 3, 4, thr=150)
+    thumb_out = (ndist(xyz, 4, 0) > 0.85) and (ndist(xyz, 4, 5) > 0.45)
+    thumb = thumb_ext and thumb_out
+
+    # Остальные — по углам
+    index  = finger_extended(xyz, 5, 6, 7, 8,  thr=165)
+    middle = finger_extended(xyz, 9, 10, 11, 12, thr=165)
+    ring   = finger_extended(xyz, 13, 14, 15, 16, thr=165)
+    pinky  = finger_extended(xyz, 17, 18, 19, 20, thr=165)
+
+    return [thumb, index, middle, ring, pinky]
+
+
+def is_letter_1(fingers):
+    # только указательный
+    return fingers == [False, True,  False, False, False]
+
+def is_letter_2(fingers):
+    # указательный + средний
+    return fingers == [False, True,  True,  False, False]
+
+def is_letter_3(fingers):
+    # указательный + средний + безымянный
+    return fingers == [False, True,  True,  True,  False]
+
+def is_letter_4(fingers):
+    # четыре пальца без большого
+    return fingers == [False, True,  True,  True,  True]
+
+def is_letter_5(fingers):
+    # все пять
+    return fingers == [True,  True,  True,  True,  True]
+
+def detect_digit_1_5(fingers):
+    """
+    Возвращает строку "1".."5" или None.
+    Важно: проверяем 5->1, чтобы не было ложных совпадений.
+    """
+    if is_letter_5(fingers): return "5"
+    if is_letter_4(fingers): return "4"
+    if is_letter_3(fingers): return "3"
+    if is_letter_2(fingers): return "2"
+    if is_letter_1(fingers): return "1"
+    return None
+
+# =========================
 # СГЛАЖИВАНИЕ РЕЗУЛЬТАТА
 # =========================
 
@@ -899,6 +957,15 @@ def main():
                     is_g = is_letter_G(hand_lms)
                     is_e = is_letter_E(hand_lms)
                     is_zh = is_letter_ZH(hand_lms)
+
+                    # --- ЦИФРЫ 1..5 (СТАТИЧЕСКИЕ) ---
+                    fingers = get_fingers_state(xyz)
+                    digit = detect_digit_1_5(fingers)
+                    if digit is not None:
+                        detected_label = digit
+                        draw_hand(frame, hand_lms, color=(0, 255, 0))
+                        continue
+
 
                     # --- ДИНАМИЧЕСКАЯ БУКВА Д (САМАЯ ПЕРВАЯ) ---
                     if is_D_pose(xyz):
